@@ -118,6 +118,8 @@ def main(argv=None):
 
         participants = config['PARTICIPANTS']
         dont_pair = config['DONT-PAIR']
+	if dont_pair == None:
+		dont_pair = []
         if len(participants) < 2:
             raise Exception('Not enough participants specified.')
         
