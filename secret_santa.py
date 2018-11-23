@@ -10,7 +10,7 @@ import socket
 import sys
 import getopt
 import os
-
+import json
 help_message = '''
 To use, fill out config.yml with your own participants. You can also specify 
 DONT-PAIR so that people don't get assigned their significant other.
@@ -44,15 +44,17 @@ Subject: {subject}
 """
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yml')
+participant_file = os.path.join(os.path.dirname(__file__), 'participants.json')
 
 class Person:
-    def __init__(self, name, email, invalid_matches):
+    def __init__(self, name, email, cubicle, invalid_matches):
         self.name = name
         self.email = email
+	self.cubicle = cubicle
         self.invalid_matches = invalid_matches
     
     def __str__(self):
-        return "%s <%s>" % (self.name, self.email)
+        return "%s <%s> - %s" % (self.name, self.email, self.cubicle)
 
 class Pair:
     def __init__(self, giver, reciever):
@@ -116,7 +118,8 @@ def main(argv=None):
                 raise Exception(
                     'Required parameter %s not in yaml config file!' % (key,))
 
-        participants = config['PARTICIPANTS']
+        participants = json.loads(open(participant_file).read())
+	print participants
         dont_pair = config['DONT-PAIR']
 	if dont_pair == None:
 		dont_pair = []
@@ -124,8 +127,9 @@ def main(argv=None):
             raise Exception('Not enough participants specified.')
         
         givers = []
+
         for person in participants:
-            name, email = re.match(r'([^<]*)<([^>]*)>', person).groups()
+            name, email, cubicle = person['name'], person['email'], person['cubicle']
             name = name.strip()
             invalid_matches = []
             for pair in dont_pair:
@@ -135,7 +139,7 @@ def main(argv=None):
                     for member in names:
                         if name != member:
                             invalid_matches.append(member)
-            person = Person(name, email, invalid_matches)
+            person = Person(name, email, cubicle, invalid_matches)
             givers.append(person)
         
         recievers = givers[:]
