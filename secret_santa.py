@@ -62,14 +62,15 @@ class Pair:
         self.reciever = reciever
     
     def __str__(self):
-        return "%s ---> %s" % (self.giver.name, self.reciever.name)
+        return "%s (%s)---> %s (%s)" % (self.giver.name, self.giver.cubicle, self.reciever.name, self.reciever.cubicle)
 
 def parse_yaml(yaml_path=CONFIG_PATH):
     return yaml.load(open(yaml_path))    
 
 def choose_reciever(giver, recievers):
     choice = random.choice(recievers)
-    if choice.name in giver.invalid_matches or giver.name == choice.name:
+    if choice.name in giver.invalid_matches or giver.name == choice.name or giver.cubicle == choice.cubicle:
+	print 'same cubicle',  giver, choice
         if len(recievers) is 1:
             raise Exception('Only one reciever left, try again')
         return choose_reciever(giver, recievers)
@@ -80,13 +81,25 @@ def create_pairs(g, r):
     givers = g[:]
     recievers = r[:]
     pairs = []
+#   print 'Giver \n'
+#    for p in givers : print p
+#    print '\n Rec \n'
+#    for p in recievers: print p
+
     for giver in givers:
         try:
-            reciever = choose_reciever(giver, recievers)
+	    mod_rec = list(filter(lambda x: x.cubicle != giver.cubicle, recievers))
+	    #mod_rec = recievers
+	    print 'modified' 
+            for p in mod_rec : print p
+            reciever = choose_reciever(giver, mod_rec)
+	    print 'Choosen', reciever
+	    print 'Recievers Left '
+            for p in recievers: print p
             recievers.remove(reciever)
             pairs.append(Pair(giver, reciever))
-        except:
-            return create_pairs(g, r)
+        except Exception as e:
+	    return create_pairs(g, r)
     return pairs
 
 
@@ -119,7 +132,6 @@ def main(argv=None):
                     'Required parameter %s not in yaml config file!' % (key,))
 
         participants = json.loads(open(participant_file).read())
-	print participants
         dont_pair = config['DONT-PAIR']
 	if dont_pair == None:
 		dont_pair = []
@@ -141,7 +153,8 @@ def main(argv=None):
                             invalid_matches.append(member)
             person = Person(name, email, cubicle, invalid_matches)
             givers.append(person)
-        
+
+        random.shuffle(givers) 
         recievers = givers[:]
         pairs = create_pairs(givers, recievers)
         if not send:
