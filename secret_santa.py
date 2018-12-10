@@ -1,5 +1,4 @@
 import yaml
-# sudo pip install pyyaml
 import re
 import random
 import smtplib
@@ -11,8 +10,9 @@ import sys
 import getopt
 import os
 import json
+from encrypt import AESCipher;
 help_message = '''
-To use, fill out config.yml with your own participants. You can also specify 
+To use, fill out config.yml with your own participants. You can also specify
 DONT-PAIR so that people don't get assigned their significant other.
 
 You'll also need to specify your mail server settings. An example is provided
@@ -20,17 +20,18 @@ for routing mail through gmail.
 
 For more information, see README.
 '''
+iv = 'This is an IV456'
 
 REQRD = (
-    'SMTP_SERVER', 
-    'SMTP_PORT', 
-    'USERNAME', 
-    'PASSWORD', 
-    'TIMEZONE', 
-    'PARTICIPANTS', 
-    'DONT-PAIR', 
-    'FROM', 
-    'SUBJECT', 
+    'SMTP_SERVER',
+    'SMTP_PORT',
+    'USERNAME',
+    'PASSWORD',
+    'TIMEZONE',
+    'PARTICIPANTS',
+    'DONT-PAIR',
+    'FROM',
+    'SUBJECT',
     'MESSAGE',
 )
 
@@ -40,7 +41,6 @@ Message-Id: {message_id}
 From: {frm}
 To: {to}
 Subject: {subject}
-        
 """
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yml')
@@ -52,7 +52,7 @@ class Person:
         self.email = email
 	self.cubicle = cubicle
         self.invalid_matches = invalid_matches
-    
+
     def __str__(self):
         return "%s <%s> - %s" % (self.name, self.email, self.cubicle)
 
@@ -60,12 +60,12 @@ class Pair:
     def __init__(self, giver, reciever):
         self.giver = giver
         self.reciever = reciever
-    
+
     def __str__(self):
-        return "%s (%s)---> %s (%s)" % (self.giver.name, self.giver.cubicle, self.reciever.name, self.reciever.cubicle)
+        return "%s (%s)---> %s (%s)" % (self.giver.name, self.giver.cubicle, self.reciever.name, self.reciever.cubicle, self.key)
 
 def parse_yaml(yaml_path=CONFIG_PATH):
-    return yaml.load(open(yaml_path))    
+    return yaml.load(open(yaml_path))
 
 def choose_reciever(giver, recievers):
     choice = random.choice(recievers)
@@ -90,7 +90,7 @@ def create_pairs(g, r):
         try:
 	    mod_rec = list(filter(lambda x: x.cubicle != giver.cubicle, recievers))
 	    #mod_rec = recievers
-	    print 'modified' 
+	    print 'modified'
             for p in mod_rec : print p
             reciever = choose_reciever(giver, mod_rec)
 	    print 'Choosen', reciever
@@ -113,18 +113,21 @@ def main(argv=None):
         argv = sys.argv
     try:
         try:
-            opts, args = getopt.getopt(argv[1:], "shc", ["send", "help"])
+            opts, args = getopt.getopt(argv[1:], "shc", ["send", "help", "encrypt"])
         except getopt.error, msg:
             raise Usage(msg)
-    
+
         # option processing
         send = False
+        encrypt = False
         for option, value in opts:
             if option in ("-s", "--send"):
                 send = True
             if option in ("-h", "--help"):
                 raise Usage(help_message)
-                
+            if option in ("-e", "--encrypt"):
+                encrypt = True
+
         config = parse_yaml()
         for key in REQRD:
             if key not in config.keys():
@@ -137,7 +140,7 @@ def main(argv=None):
 		dont_pair = []
         if len(participants) < 2:
             raise Exception('Not enough participants specified.')
-        
+
         givers = []
 
         for person in participants:
@@ -154,22 +157,30 @@ def main(argv=None):
             person = Person(name, email, cubicle, invalid_matches)
             givers.append(person)
 
-        random.shuffle(givers) 
+        random.shuffle(givers)
         recievers = givers[:]
         pairs = create_pairs(givers, recievers)
+        if encrypt:
+            for pair in pairs:
+                key = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
+                pair.key = key
+                cipher = AESCipher(key, iv)
+                cipher.encrypt(pair.reciever.name)
+                print pair;
+
         if not send:
             print """
 Test pairings:
-                
+
 %s
-                
+
 To send out emails with new pairings,
 call with the --send argument:
 
     $ python secret_santa.py --send
-            
+
             """ % ("\n".join([str(p) for p in pairs]))
-        
+
         if send:
             server = smtplib.SMTP(config['SMTP_SERVER'], config['SMTP_PORT'])
             server.starttls()
@@ -181,12 +192,13 @@ call with the --send argument:
             message_id = '<%s@%s>' % (str(time.time())+str(random.random()), socket.gethostname())
             frm = config['FROM']
             to = pair.giver.email
-            subject = config['SUBJECT'].format(santa=pair.giver.name, santee=pair.reciever.name)
+            #subject = config['SUBJECT'].format(santa=pair.giver.name, santee=pair.reciever.name)
+            subject = 'Your Secret Santa'
             body = (HEADER+config['MESSAGE']).format(
-                date=date, 
-                message_id=message_id, 
-                frm=frm, 
-                to=to, 
+                date=date,
+                message_id=message_id,
+                frm=frm,
+                to=to,
                 subject=subject,
                 santa=pair.giver.name,
                 santee=pair.reciever.name,
@@ -197,7 +209,7 @@ call with the --send argument:
 
         if send:
             server.quit()
-        
+
     except Usage, err:
         print >> sys.stderr, sys.argv[0].split("/")[-1] + ": " + str(err.msg)
         print >> sys.stderr, "\t for help use --help"
