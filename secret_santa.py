@@ -10,6 +10,9 @@ import sys
 import getopt
 import os
 import json
+import string
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from encrypt import AESCipher;
 help_message = '''
 To use, fill out config.yml with your own participants. You can also specify
@@ -36,11 +39,7 @@ REQRD = (
 )
 
 HEADER = """Date: {date}
-Content-Type: text/plain; charset="utf-8"
-Message-Id: {message_id}
-From: {frm}
-To: {to}
-Subject: {subject}
+Content-Type: text/html; charset=UTF-8"
 """
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yml')
@@ -62,7 +61,31 @@ class Pair:
         self.reciever = reciever
 
     def __str__(self):
-        return "%s (%s)---> %s (%s)" % (self.giver.name, self.giver.cubicle, self.reciever.name, self.reciever.cubicle, self.key)
+        if (hasattr(self, 'key')):
+            return "%s (%d)---> %s (%d) key is %s" % (self.giver.name, self.giver.cubicle, self.reciever.name, self.reciever.cubicle, self.key)
+        else:
+            return "%s (%d)---> %s (%d)" % (self.giver.name, self.giver.cubicle, self.reciever.name, self.reciever.cubicle)
+'''
+class Mailer:
+	def __init__(self, mail_smtp, mail_from, mail_password):
+		print mail_smtp
+		self.server = smtplib.SMTP(mail_smtp, '587')
+                print 'Hey !!! Mailer ' + str(mail_smtp) + ' is Initialized with ' + str(mail_from)
+		self.server.starttls()
+		self.server.login(mail_from, mail_password)
+	def sendMail(self, sub, frm, recipient, body):
+		msg = MIMEMultipart('alternative')
+		msg['Subject'] = sub
+		msg['From'] = frm
+		msg['To'] = recipient
+		bdy = MIMEText(body, 'html')
+		msg.attach(bdy)
+                print 'Sending mail to '+ str(recipient)
+		#self.server.sendmail(frm, recipient, msg.as_string())
+	def kill(self):
+		self.server.quit()
+		print 'Bye bye ! Quitting Mailer ....'
+'''
 
 def parse_yaml(yaml_path=CONFIG_PATH):
     return yaml.load(open(yaml_path))
@@ -90,11 +113,11 @@ def create_pairs(g, r):
         try:
 	    mod_rec = list(filter(lambda x: x.cubicle != giver.cubicle, recievers))
 	    #mod_rec = recievers
-	    print 'modified'
+#	    print 'modified'
             for p in mod_rec : print p
             reciever = choose_reciever(giver, mod_rec)
-	    print 'Choosen', reciever
-	    print 'Recievers Left '
+#	    print 'Choosen', reciever
+#	    print 'Recievers Left '
             for p in recievers: print p
             recievers.remove(reciever)
             pairs.append(Pair(giver, reciever))
@@ -113,20 +136,21 @@ def main(argv=None):
         argv = sys.argv
     try:
         try:
-            opts, args = getopt.getopt(argv[1:], "shc", ["send", "help", "encrypt"])
+            opts, args = getopt.getopt(argv[1:], "shc", ["send", "help", "doencrypt"])
         except getopt.error, msg:
             raise Usage(msg)
 
         # option processing
+        doencrypt = False
         send = False
-        encrypt = False
+        print opts
         for option, value in opts:
             if option in ("-s", "--send"):
                 send = True
             if option in ("-h", "--help"):
                 raise Usage(help_message)
-            if option in ("-e", "--encrypt"):
-                encrypt = True
+            if option in ("-e", "--doencrypt"):
+                doencrypt = True
 
         config = parse_yaml()
         for key in REQRD:
@@ -160,12 +184,12 @@ def main(argv=None):
         random.shuffle(givers)
         recievers = givers[:]
         pairs = create_pairs(givers, recievers)
-        if encrypt:
+        if doencrypt:
             for pair in pairs:
                 key = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
                 pair.key = key
                 cipher = AESCipher(key, iv)
-                cipher.encrypt(pair.reciever.name)
+                pair.reciever.hash = cipher.encrypt(pair.reciever.name)
                 print pair;
 
         if not send:
@@ -182,9 +206,10 @@ call with the --send argument:
             """ % ("\n".join([str(p) for p in pairs]))
 
         if send:
-            server = smtplib.SMTP(config['SMTP_SERVER'], config['SMTP_PORT'])
+	    server = smtplib.SMTP(config['SMTP_SERVER'], config['SMTP_PORT'])
             server.starttls()
-            server.login(config['USERNAME'], config['PASSWORD'])
+	    server.login(config['USERNAME'], config['PASSWORD'])
+#	    mail_obj = Mailer(config['SMTP_SERVER'], config['USERNAME'], config['PASSWORD'])
         for pair in pairs:
             zone = pytz.timezone(config['TIMEZONE'])
             now = zone.localize(datetime.datetime.now())
@@ -194,21 +219,30 @@ call with the --send argument:
             to = pair.giver.email
             #subject = config['SUBJECT'].format(santa=pair.giver.name, santee=pair.reciever.name)
             subject = 'Your Secret Santa'
-            body = (HEADER+config['MESSAGE']).format(
-                date=date,
-                message_id=message_id,
-                frm=frm,
-                to=to,
-                subject=subject,
+            body = (config['MESSAGE']).format(
+#                date=date,
+#                message_id=message_id,
+#                frm=frm,
+#                to=to,
+#                subject=subject,
                 santa=pair.giver.name,
-                santee=pair.reciever.name,
+                santee=pair.reciever.hash,
             )
             if send:
-                result = server.sendmail(frm, [to], body)
-                print "Emailed %s <%s>" % (pair.giver.name, to)
+                if (to == 'arpitha.hn@mobinius.com'):
+                    print body
+                    msg = MIMEMultipart('alternative')
+                    msg['Subject'] = 'Secret Santa'
+                    msg['From'] = frm
+                    msg['To'] = to
+                    part2 = MIMEText(body, 'html')
+                    msg.attach(part2)
+                    result = server.sendmail(frm, [to], msg.as_string())
+                    print "Emailed %s <%s> with key %s" % (pair.giver.name, to, pair.key)
 
         if send:
-            server.quit()
+            #mail_obj.kill()
+	    server.quit()
 
     except Usage, err:
         print >> sys.stderr, sys.argv[0].split("/")[-1] + ": " + str(err.msg)
