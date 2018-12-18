@@ -4,7 +4,7 @@ Intro
 **secret-santa** can help you manage a list of secret santa participants by
 randomly assigning pairings and sending emails. It can avoid pairing 
 couples to their significant other, and allows custom email messages to be 
-specified.
+specified. Also it encrypts using aes with a key
 
 Dependencies
 ------------
@@ -16,8 +16,8 @@ Usage
 -----
 
 Copy config.yml.template to config.yml and enter in the connection details 
-for your outgoing mail server. Modify the participants and couples lists and 
-the email message if you wish.
+for your outgoing mail server. Modify the participants in participants.json with email, phone number cubicle. 
+the email message can be edited in the config.yaml if you wish.
 
     cd secret-santa/
     cp config.yml.template config.yml
@@ -63,27 +63,7 @@ Here is the example configuration unchanged:
 
       Nothing could possibly go wrong...
 
-      http://github.com/underbluewaters/secret-santa
-
-Once configured, call secret-santa:
-
-    python secret_santa.py
-
-Calling secret-santa without arguments will output a test pairing of 
-participants.
-
-        Test pairings:
-
-        Chad ---> Bill
-        Jen ---> Sharon
-        Bill ---> Chad
-        Sharon ---> Jen
-
-        To send out emails with new pairings,
-        call with the --send argument:
-
-            $ python secret_santa.py --send
 
 To send the emails, call using the `--send` argument
 
-    python secret_santa.py --send
+    python secret_santa.py --doencrypt --send
